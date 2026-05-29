@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  # Opt into Node 24 ahead of the June 2026 forced cutover.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  python:
+    name: Python reference + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: python/requirements.txt
+      - name: Install
+        working-directory: python
+        run: pip install -r requirements.txt
+      - name: pytest
+        working-directory: python
+        run: pytest tests/ -v
+      - name: Benchmark (smoke)
+        working-directory: python
+        run: python bench.py --iters 50
+
+  verilator-lint:
+    name: Verilator lint (RTL)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Verilator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator
+          verilator --version
+      - name: Lint kyber_q_alu
+        run: verilator --lint-only -Wall rtl/kyber_q_alu.sv
+      - name: Lint ntt_butterfly
+        run: verilator --lint-only -Wall rtl/ntt_butterfly.sv
+      - name: Lint keccak_round
+        run: verilator --lint-only -Wall rtl/keccak_round.sv
+
+  cocotb:
+    name: cocotb (RTL vs Python golden model)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Icarus + cocotb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog
+          pip install cocotb pytest hypothesis
+      - name: Run q_alu testbench
+        working-directory: tb
+        run: make q_alu

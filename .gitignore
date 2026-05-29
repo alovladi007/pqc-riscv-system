@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# cocotb / simulation artifacts
+sim_build/
+results.xml
+*.vcd
+*.fst
+*.ghw
+*.gtkw
+dump.vcd
+
+# Verilator
+obj_dir/
+*.dat
+*.exe
+
+# Synthesis tools
+*.bit
+*.bin
+*.mcs
+*.jou
+*.log
+*.str
+*.pb
+.Xil/
+vivado_*.jou
+vivado_*.log
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
