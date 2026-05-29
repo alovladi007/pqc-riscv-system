@@ -62,18 +62,25 @@ module kyber_q_alu #(
     localparam int unsigned QUOT_W  = MUL_W - BARR_SH;  // 14
     localparam int unsigned R_W     = 13;               // r in [0, 2Q), 2Q = 6658 < 2^13
 
+    // t_quotient * Q needs full width: t_quotient is up to ~5039 (13
+    // bits) and Q is 12 bits, so the product is up to 26 bits. The first
+    // refactor pass truncated t_quotient to 12 bits, which dropped the
+    // top bit and silently broke barrett_out for inputs >= 2*Q.
+    localparam int unsigned TQ_Q_W = QUOT_W + 12;   // 14 + 12 = 26
+
     logic [MUL_W-1:0]   mul_aM;
     logic [QUOT_W-1:0]  t_quotient;
+    logic [TQ_Q_W-1:0]  tq_times_q;
     logic [R_W-1:0]     r_pre;
+    logic [R_W-1:0]     r_minus_q;
     logic [11:0]        barrett_out;
+    logic [12:0]        add_minus_q;
 
-    logic [R_W-1:0]  r_minus_q;
-    logic [12:0]     add_minus_q;
-
-    assign mul_aM     = in_a * BARR_M[13:0];                    // 24 * 14 -> 38
-    assign t_quotient = mul_aM[MUL_W-1:BARR_SH];                // top 14 bits
-    assign r_pre      = in_a[R_W-1:0] - (t_quotient[11:0] * Q[11:0]);  // 13 bits, in [0, 2Q)
-    assign r_minus_q  = r_pre - R_W'(Q);
+    assign mul_aM      = in_a * BARR_M[13:0];                   // 24 * 14 -> 38
+    assign t_quotient  = mul_aM[MUL_W-1:BARR_SH];               // top 14 bits
+    assign tq_times_q  = t_quotient * Q[11:0];                  // up to 26 bits
+    assign r_pre       = in_a[R_W-1:0] - tq_times_q[R_W-1:0];   // bottom 13 bits
+    assign r_minus_q   = r_pre - R_W'(Q);
     assign barrett_out = (r_pre >= R_W'(Q)) ? r_minus_q[11:0]
                                             : r_pre[11:0];
 
