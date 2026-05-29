@@ -63,7 +63,9 @@ module keccak_round (
     logic [63:0] B [0:24];
 
     function automatic [63:0] rotl64 (input [63:0] x, input int n);
-        return (n == 0) ? x : ({x, x} >> (64 - n));
+        logic [127:0] dup;
+        dup = {x, x};
+        return (n == 0) ? x : dup[127-n -: 64];
     endfunction
 
     generate
@@ -94,9 +96,9 @@ module keccak_round (
     // -----------------------------------------------------------------------
     generate
         for (gx = 0; gx < 25; gx++) begin : g_iota
-            if (gx == 0) begin
+            if (gx == 0) begin : g_iota_xor
                 assign state_out[gx] = A_chi[gx] ^ round_const;
-            end else begin
+            end else begin : g_iota_passthrough
                 assign state_out[gx] = A_chi[gx];
             end
         end

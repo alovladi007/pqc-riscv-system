@@ -51,33 +51,55 @@ module kyber_q_alu #(
     //   t = (a * M) >> SHIFT
     //   r = a - t * Q
     //   if (r >= Q) r -= Q
+    //
+    // Widths are sized exactly so verilator's -Wall (incl. WIDTHEXPAND /
+    // WIDTHTRUNC) is clean: the multiply output is 38 bits (24+14, since
+    // BARR_M = 5039 fits in 13 bits but we keep one bit margin), the
+    // quotient is 24-SHIFT = 14 bits, and r_pre stays in 13 bits because
+    // |r_pre| <= 2*Q in the Barrett invariant.
     // ---------------------------------------------------------------------
-    logic [47:0] mul_aM;
-    logic [23:0] t_quotient;
-    logic [23:0] r_pre;
-    logic [11:0] barrett_out;
+    localparam int unsigned MUL_W   = 38;   // 24 + 14 (Barrett M = 5039 fits 13)
+    localparam int unsigned QUOT_W  = MUL_W - BARR_SH;  // 14
+    localparam int unsigned R_W     = 13;               // r in [0, 2Q), 2Q = 6658 < 2^13
 
-    assign mul_aM      = in_a * BARR_M[23:0];
-    assign t_quotient  = mul_aM[47:BARR_SH];          // top (48-SHIFT)=24 bits
-    assign r_pre       = in_a - t_quotient * Q[11:0];
-    assign barrett_out = (r_pre >= Q[23:0]) ? (r_pre - Q[23:0]) : r_pre[11:0];
+    logic [MUL_W-1:0]   mul_aM;
+    logic [QUOT_W-1:0]  t_quotient;
+    logic [R_W-1:0]     r_pre;
+    logic [11:0]        barrett_out;
+
+    logic [R_W-1:0]  r_minus_q;
+    logic [12:0]     add_minus_q;
+
+    assign mul_aM     = in_a * BARR_M[13:0];                    // 24 * 14 -> 38
+    assign t_quotient = mul_aM[MUL_W-1:BARR_SH];                // top 14 bits
+    assign r_pre      = in_a[R_W-1:0] - (t_quotient[11:0] * Q[11:0]);  // 13 bits, in [0, 2Q)
+    assign r_minus_q  = r_pre - R_W'(Q);
+    assign barrett_out = (r_pre >= R_W'(Q)) ? r_minus_q[11:0]
+                                            : r_pre[11:0];
 
     // ---------------------------------------------------------------------
     // Modular add / sub (combinational)
     // ---------------------------------------------------------------------
     logic [12:0] add_sum;
     logic [11:0] add_out;
-    logic [12:0] sub_diff;
     logic [11:0] sub_out;
 
-    assign add_sum = in_a[11:0] + in_b[11:0];
-    assign add_out = (add_sum >= Q[12:0]) ? (add_sum - Q[12:0]) : add_sum[11:0];
+    assign add_sum     = {1'b0, in_a[11:0]} + {1'b0, in_b[11:0]};
+    assign add_minus_q = add_sum - 13'(Q);
+    assign add_out     = (add_sum >= 13'(Q)) ? add_minus_q[11:0]
+                                             : add_sum[11:0];
 
-    // sub: handle borrow by adding Q if a < b
-    assign sub_diff = (in_a[11:0] >= in_b[11:0])
-                      ? {1'b0, in_a[11:0] - in_b[11:0]}
-                      : {1'b0, in_a[11:0] + Q[11:0] - in_b[11:0]};
-    assign sub_out  = sub_diff[11:0];
+    // sub: handle borrow by adding Q if a < b. Both branches are exactly 12 bits.
+    assign sub_out = (in_a[11:0] >= in_b[11:0])
+                     ? (in_a[11:0] - in_b[11:0])
+                     : (in_a[11:0] + Q[11:0] - in_b[11:0]);
+
+    // Tell verilator that in_b's upper bits are intentionally unused
+    // (the ALU only operates on 12-bit operands; the 24-bit width is
+    // shared with the Barrett path).
+    /* verilator lint_off UNUSED */
+    wire _unused_in_b = &{1'b0, in_b[23:12], 1'b0};
+    /* verilator lint_on UNUSED */
 
     // ---------------------------------------------------------------------
     // Output register

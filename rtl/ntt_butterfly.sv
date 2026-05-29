@@ -62,23 +62,38 @@ module ntt_butterfly #(
     //   t = (a + u*Q) >> R_BITS
     //   if (t >= Q) t -= Q
     // ---------------------------------------------------------------------
-    logic [MONT_R_BITS-1:0] u;
-    logic [31:0]            t_pre;
-    logic [11:0]            t_red;
-    logic [12:0]            sum, diff;
-    logic [11:0]            a_plus_t, a_minus_t;
+    // Explicit width sizing for verilator -Wall.
+    //   u_mul = (zeta_b_low * q_inv_neg_low) is a 16x16 -> 32 bit product;
+    //   we keep only the low 16 (mod 2^16). t_red_pre is the sum at full
+    //   width (24 + 16) so the carry into the high bits is captured.
+    localparam int unsigned T_PRE_W = 28;  // zeta_b is 24-bit; u*Q adds < 4 bits
 
-    assign u         = (zeta_b_s1[MONT_R_BITS-1:0] * MONT_Q_INV_NEG[MONT_R_BITS-1:0]);
-    assign t_pre     = zeta_b_s1 + u * Q[11:0];
-    assign t_red     = (t_pre[27:MONT_R_BITS] >= Q[11:0])
-                       ? (t_pre[27:MONT_R_BITS] - Q[11:0])
-                       : t_pre[27:MONT_R_BITS];
+    logic [MONT_R_BITS-1:0]    u;
+    logic [MONT_R_BITS*2-1:0]  u_mul;
+    logic [T_PRE_W-1:0]        t_pre;
+    logic [11:0]               t_red_lo;
+    logic [11:0]               t_red_minus_q;
+    logic [11:0]               t_red;
+    logic [12:0]               sum, diff;
+    logic [11:0]               sum_minus_q;
+    logic [11:0]               a_plus_t, a_minus_t;
 
-    assign sum  = a_s1 + t_red;
-    assign diff = (a_s1 >= t_red) ? (a_s1 - t_red) : (a_s1 + Q[11:0] - t_red);
+    assign u_mul     = zeta_b_s1[MONT_R_BITS-1:0] * MONT_Q_INV_NEG[MONT_R_BITS-1:0];
+    assign u         = u_mul[MONT_R_BITS-1:0];
+    // t_pre = zeta_b + u*q, all widened to T_PRE_W bits explicitly.
+    assign t_pre     = T_PRE_W'(zeta_b_s1) + T_PRE_W'(u * Q[11:0]);
+    assign t_red_lo  = t_pre[T_PRE_W-1:MONT_R_BITS];
+    assign t_red_minus_q = t_red_lo - Q[11:0];
+    assign t_red     = (t_red_lo >= Q[11:0]) ? t_red_minus_q : t_red_lo;
 
-    assign a_plus_t  = (sum  >= Q[12:0]) ? (sum  - Q[12:0]) : sum[11:0];
-    assign a_minus_t = diff[11:0];
+    assign sum  = {1'b0, a_s1} + {1'b0, t_red};
+    assign diff = (a_s1 >= t_red)
+                  ? {1'b0, a_s1 - t_red}
+                  : {1'b0, a_s1 + Q[11:0] - t_red};
+
+    assign sum_minus_q = sum[11:0] - Q[11:0];
+    assign a_plus_t    = (sum >= 13'(Q)) ? sum_minus_q : sum[11:0];
+    assign a_minus_t   = diff[11:0];
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
