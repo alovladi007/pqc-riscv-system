@@ -1,3 +1,8 @@
 pytest>=7.0
 hypothesis>=6.0
 pycryptodome>=3.18
+# kyber-py: independent pure-Python ML-KEM-768 implementation used as
+# the cross-check oracle in tests/test_kyber768.py. If our byte-for-byte
+# output matches theirs for many random seeds, the implementation is
+# correct with overwhelming probability.
+kyber-py>=1.0

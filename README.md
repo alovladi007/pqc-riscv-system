@@ -79,13 +79,22 @@ Python reference. CI runs them automatically on every push.
 
 ## What's done in Phase 2
 
-- [x] Pure-Python ML-KEM-768 reference (encrypts to NIST KATs bit-exact)
+- [x] Pure-Python ML-KEM-768 reference (`python/kyber768.py`):
+      `keygen_internal(d, z)`, `encaps_internal(ek, m)`, `decaps(dk, c)`
+      per FIPS 203, plus `keygen()` / `encaps()` wrappers
 - [x] Standalone NTT / inverse NTT reference (256-point over GF(3329))
 - [x] Modular arithmetic primitives (Barrett, Montgomery) — Python + SV
+- [x] Polynomial machinery: compress/decompress (`d ∈ {1,4,5,10,11}`),
+      byte_encode/decode, CBD(η) noise sampling, rejection sampling
+      from SHAKE128
+- [x] Symmetric primitives wired (G = SHA3-512, H = SHA3-256,
+      J = SHAKE256→32B, PRF = SHAKE256-based, XOF = SHAKE128 stream)
+- [x] **Correctness validated 26/26:** 10 round-trip tests +
+      16 byte-exact cross-checks against
+      [kyber-py](https://github.com/GiacomoPope/kyber-py) (every byte of
+      `ek`, `dk`, `c`, `K` matches for randomized seeds)
 - [x] cocotb testbench framework with Python-as-golden-model pattern
-- [x] CI: `pytest` + `verilator --lint-only` on every push
-- [x] Known Answer Test vectors imported from
-      [pq-crystals/kyber](https://github.com/pq-crystals/kyber) `KAT/`
+- [x] CI: `pytest` + `verilator --lint-only` + cocotb on every push
 
 ## What's coming in Phase 3
 
