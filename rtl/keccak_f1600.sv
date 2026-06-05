@@ -111,13 +111,29 @@ module keccak_f1600 (
 
     // -----------------------------------------------------------------
     // Round combinational instance
+    //
+    // keccak_round uses PACKED 1600-bit bit-vector ports (not
+    // unpacked arrays) because cocotb's VPI binding under Icarus
+    // doesn't propagate unpacked array module ports — state_in
+    // arrived as all-X in cocotb sim, causing round_out to be X.
+    // Pack/unpack here, transparent to the algorithm.
     // -----------------------------------------------------------------
-    logic [63:0] round_out [0:24];
+    logic [63:0]   round_out [0:24];
+    logic [1599:0] state_packed;
+    logic [1599:0] round_out_packed;
+
+    genvar gp;
+    generate
+        for (gp = 0; gp < 25; gp++) begin : g_pack_state
+            assign state_packed[gp*64 +: 64]    = state[gp];
+            assign round_out[gp]                = round_out_packed[gp*64 +: 64];
+        end
+    endgenerate
 
     keccak_round u_round (
-        .state_in    (state),
-        .round_const (rc_rom[round_idx]),
-        .state_out   (round_out)
+        .state_in_packed  (state_packed),
+        .round_const      (rc_rom[round_idx]),
+        .state_out_packed (round_out_packed)
     );
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -173,10 +189,6 @@ module keccak_f1600 (
             if (fsm == S_RUN) begin
                 for (int i = 0; i < 25; i++) state[i] <= round_out[i];
                 round_idx <= round_idx + 5'd1;
-                // DEBUG (Phase 3b): trace round-commit so we can tell from
-                // CI log whether the simulator is running this block at all.
-                $display("[KECCAK_DEBUG] t=%0t round=%0d state[0]_in=0x%016h round_out[0]=0x%016h",
-                         $time, round_idx, state[0], round_out[0]);
             end
         end
     end

@@ -13,11 +13,28 @@
 
 `default_nettype none
 
+// Ports are PACKED bit vectors (1600 bits), not unpacked arrays.
+// Icarus's VPI under cocotb mishandles unpacked-array module ports —
+// state_in[0..24] received as all-X even when the driving register
+// holds correct values. Packed bit-vector ports propagate cleanly
+// through Icarus + cocotb. Internal nets remain unpacked.
 module keccak_round (
-    input  wire [63:0] state_in   [0:24],
-    input  wire [63:0] round_const,
-    output logic [63:0] state_out [0:24]
+    input  wire [1599:0] state_in_packed,
+    input  wire [63:0]   round_const,
+    output logic [1599:0] state_out_packed
 );
+
+    // Unpack input
+    logic [63:0] state_in [0:24];
+    genvar gi;
+    generate
+        for (gi = 0; gi < 25; gi++) begin : g_unpack_in
+            assign state_in[gi] = state_in_packed[gi*64 +: 64];
+        end
+    endgenerate
+
+    // state_out is computed internally as unpacked, packed at the bottom
+    logic [63:0] state_out [0:24];
 
     // -----------------------------------------------------------------------
     // theta step
@@ -123,6 +140,13 @@ module keccak_round (
             end else begin : g_iota_passthrough
                 assign state_out[gx] = A_chi[gx];
             end
+        end
+    endgenerate
+
+    // Pack output for the port
+    generate
+        for (gi = 0; gi < 25; gi++) begin : g_pack_out
+            assign state_out_packed[gi*64 +: 64] = state_out[gi];
         end
     endgenerate
 

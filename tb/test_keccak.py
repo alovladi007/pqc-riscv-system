@@ -45,21 +45,20 @@ async def load_state(dut, state):
 
 
 async def read_state(dut):
-    """Read all 25 lanes by probing dut.state[i] hierarchically.
+    """Read all 25 lanes via the case-decoded combinational read port.
 
-    The keccak_f1600 read-port path (read_addr -> read_data) had a
-    cocotb-VPI-under-Icarus issue regardless of whether read_data was
-    comb-assigned, registered, or case-decoded — all variants read full
-    X in cocotb even though the standalone pure-SV testbench reads the
-    canonical 0xF1258F7940E1DDE7 on lane 0 after f^24(0).
-
-    Direct hierarchical probe avoids the port entirely. The state array
-    is `logic [63:0] state [0:24]`; cocotb exposes each element as
-    `dut.state[i]` regardless of the port mechanism.
+    With keccak_round's ports now packed bit-vectors (1600 bits) rather
+    than unpacked arrays, cocotb under Icarus binds them cleanly and
+    the round-commit produces real values. The read port still uses a
+    fully decoded case statement; read_addr → state[k] for k ∈ 0..24.
     """
-    await ReadOnly()
-    out = [int(dut.state[i].value) for i in range(NUM_LANES)]
-    await NextTimeStep()
+    out = []
+    for i in range(NUM_LANES):
+        dut.read_addr.value = i
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        out.append(int(dut.read_data.value))
+        await NextTimeStep()
     return out
 
 
