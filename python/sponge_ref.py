@@ -151,6 +151,30 @@ def shake_256(data: bytes, outlen: int) -> bytes:
 _KYBER_Q = 3329
 _KYBER_N = 256
 
+def sample_cbd2_from_seed(sigma: bytes, nonce: int) -> list:
+    """Reference for rtl/sample_poly_cbd2.sv. Kyber768 noise (η = 2).
+
+    Input: 32-byte sigma + 1-byte nonce. Internally SHAKE-256 produces
+    64 * η = 128 bytes. Output: 256 noise coefficients in
+    {-2, -1, 0, 1, 2} mod q via the centered binomial sampler.
+    """
+    if len(sigma) != 32:
+        raise ValueError(f"sigma must be 32 bytes, got {len(sigma)}")
+    if not (0 <= nonce <= 255):
+        raise ValueError(f"nonce must fit in a byte, got {nonce}")
+
+    data = shake_256(sigma + bytes([nonce]), 64 * 2)  # 128 bytes
+
+    bits = int.from_bytes(data, "little")
+    out = []
+    for i in range(_KYBER_N):
+        # 4 bits per coefficient: bits[4i : 4i+2] minus bits[4i+2 : 4i+4]
+        a = (bits >> (4 * i)) & 0x3
+        b = (bits >> (4 * i + 2)) & 0x3
+        out.append((bin(a).count("1") - bin(b).count("1")) % _KYBER_Q)
+    return out
+
+
 def sample_ntt_from_seed(seed: bytes, xof_bytes: int = 1024) -> list:
     """Reference implementation for rtl/sample_ntt.sv.
 

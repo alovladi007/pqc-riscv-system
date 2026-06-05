@@ -12,9 +12,9 @@ RTL_DIR = ../rtl
 COMMON_SOURCES = $(RTL_DIR)/kyber_q_alu.sv
 
 # Per-test targets — each one runs an independent cocotb test
-.PHONY: all q_alu butterfly ntt_engine keccak sha3_256 shake_128 sample_ntt clean
+.PHONY: all q_alu butterfly ntt_engine keccak sha3_256 shake_128 sample_ntt cbd2 clean
 
-all: q_alu butterfly ntt_engine keccak sha3_256 shake_128 sample_ntt
+all: q_alu butterfly ntt_engine keccak sha3_256 shake_128 sample_ntt cbd2
 
 q_alu:
 	$(MAKE) -f Makefile.run \
@@ -64,6 +64,13 @@ sample_ntt:
 		MODULE=test_sample_ntt \
 		TOPLEVEL=sample_ntt \
 		VERILOG_SOURCES="$(RTL_DIR)/keccak_round.sv $(RTL_DIR)/keccak_f1600.sv $(RTL_DIR)/shake_128.sv $(RTL_DIR)/sample_ntt.sv"
+
+cbd2:
+	$(MAKE) -f Makefile.run \
+		SIM_BUILD=sim_build/cbd2 \
+		MODULE=test_cbd2 \
+		TOPLEVEL=sample_poly_cbd2 \
+		VERILOG_SOURCES="$(RTL_DIR)/keccak_round.sv $(RTL_DIR)/keccak_f1600.sv $(RTL_DIR)/shake_256.sv $(RTL_DIR)/sample_poly_cbd2.sv"
 
 clean:
 	rm -rf sim_build results.xml *.vcd *.fst __pycache__

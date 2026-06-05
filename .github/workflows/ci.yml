@@ -60,6 +60,10 @@ jobs:
         run: verilator --lint-only -Wall -Wno-UNUSEDSIGNAL rtl/keccak_round.sv rtl/keccak_f1600.sv rtl/shake_128.sv --top-module shake_128
       - name: Lint sample_ntt (with shake + keccak deps)
         run: verilator --lint-only -Wall -Wno-UNUSEDSIGNAL rtl/keccak_round.sv rtl/keccak_f1600.sv rtl/shake_128.sv rtl/sample_ntt.sv --top-module sample_ntt
+      - name: Lint shake_256 (with keccak deps)
+        run: verilator --lint-only -Wall -Wno-UNUSEDSIGNAL rtl/keccak_round.sv rtl/keccak_f1600.sv rtl/shake_256.sv --top-module shake_256
+      - name: Lint sample_poly_cbd2 (with shake_256 deps)
+        run: verilator --lint-only -Wall -Wno-UNUSEDSIGNAL rtl/keccak_round.sv rtl/keccak_f1600.sv rtl/shake_256.sv rtl/sample_poly_cbd2.sv --top-module sample_poly_cbd2
 
   cocotb:
     name: cocotb (RTL vs Python golden model)
@@ -95,3 +99,6 @@ jobs:
       - name: sample_ntt testbench (Kyber matrix-A rejection sampler)
         working-directory: tb
         run: make sample_ntt
+      - name: sample_poly_cbd2 testbench (Kyber η=2 noise sampler)
+        working-directory: tb
+        run: make cbd2
