@@ -63,21 +63,13 @@ module keccak_f1600 (
     assign read_data = state[read_addr];
 
     // -----------------------------------------------------------------
-    // Round combinational instance
-    // -----------------------------------------------------------------
-    logic [63:0] round_out [0:24];
-
-    keccak_round u_round (
-        .state_in    (state),
-        .round_const (rc_rom[round_idx]),
-        .state_out   (round_out)
-    );
-
-    // -----------------------------------------------------------------
-    // FSM
-    //   S_IDLE  : wait for start
-    //   S_RUN   : apply one round per cycle, until round_idx reaches 23
-    //   S_DONE  : pulse done, return to IDLE
+    // FSM declarations (declared before the keccak_round instance so
+    // round_idx is visible when used as an index into rc_rom — Icarus
+    // is strict about "declaration after use" while Verilator wasn't).
+    //
+    //   S_IDLE : wait for start
+    //   S_RUN  : apply one round per cycle until round_idx reaches 23
+    //   S_DONE : pulse done, return to IDLE
     // -----------------------------------------------------------------
     typedef enum logic [1:0] {
         S_IDLE = 2'd0,
@@ -87,6 +79,17 @@ module keccak_f1600 (
 
     state_e fsm, fsm_next;
     logic [4:0] round_idx;     // 0..23
+
+    // -----------------------------------------------------------------
+    // Round combinational instance
+    // -----------------------------------------------------------------
+    logic [63:0] round_out [0:24];
+
+    keccak_round u_round (
+        .state_in    (state),
+        .round_const (rc_rom[round_idx]),
+        .state_out   (round_out)
+    );
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) fsm <= S_IDLE;
