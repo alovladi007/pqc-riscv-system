@@ -112,18 +112,27 @@ Python reference. CI runs them automatically on every push.
       byte-streaming interface, rate=136, domain=0x06; 6 cocotb tests
       vs python/sponge_ref.sha3_256 including the published "abc" KAT
       and rate-boundary stress cases**
+- [x] `shake_128.sv` — **SHAKE-128 sponge with arbitrary output
+      length (rate=168, domain=0x1F); 5 cocotb tests covering
+      sub-block / exact-rate / cross-rate-boundary outputs and the
+      34-byte-seed × 1024-byte Kyber rejection-sampler pattern**
+- [x] `sample_ntt.sv` — **Kyber matrix-A rejection sampler. Wraps
+      shake_128, processes 3-byte chunks into two 12-bit candidates,
+      accepts each < q until 256 coefficients collected. 3 cocotb
+      tests verify coef-by-coef against `sample_ntt_from_seed`
+      Python ref**
 
 **Python (Phase 4a)**
 - [x] `python/sponge_ref.py` — full sponge layer (SHA3-256/512 +
-      SHAKE-128/256) on top of keccak_ref; 62 tests cross-validate
-      against `hashlib`
+      SHAKE-128/256) on top of keccak_ref + Kyber sample_ntt_from_seed;
+      62 tests cross-validate the sponge against `hashlib`
 
 **CI** (green at HEAD)
 - `pytest` over the full Python suite — **131 tests pass** (NTT/Kyber 69 + sponge 62)
 - `verilator --lint-only -Wall` on every RTL module
-- cocotb (Icarus): q_alu (4/4), butterfly (3/3),
-  **ntt_engine forward+inverse (8/8), keccak_f1600 (3/3), sha3_256 (6/6)**
-  — **24 cocotb tests**
+- cocotb (Icarus): q_alu (4/4), butterfly (3/3), ntt_engine (8/8),
+  keccak_f1600 (3/3), sha3_256 (6/6), shake_128 (5/5), sample_ntt (3/3)
+  — **32 cocotb tests**
 
 ## Phase 3b — Keccak cocotb fix shipped
 
