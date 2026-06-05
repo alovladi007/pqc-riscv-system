@@ -26,7 +26,13 @@ module ntt_engine #(
     parameter int unsigned Q      = 3329,
     parameter int unsigned N      = 256,
     parameter int unsigned COEF_W = 12,
-    parameter int unsigned ZETA   = 17    // 256th root of unity mod Q
+    parameter int unsigned ZETA   = 17,   // 256th root of unity mod Q
+    parameter int unsigned MONT_R_MOD_Q = 2285  // R = 2^16 mod Q, used to
+                                                // pre-scale the twiddle ROM
+                                                // into Montgomery form so the
+                                                // butterfly (which Montgomery-
+                                                // reduces zeta*b internally)
+                                                // produces canonical output
 ) (
     input  wire                  clk,
     input  wire                  rst_n,
@@ -72,6 +78,9 @@ module ntt_engine #(
             base = (base * base) % Q;
             exp = exp >> 1;
         end
+        // Convert to Montgomery form so the butterfly's Montgomery
+        // reduction of zeta_mont * b lands canonical zeta * b mod Q.
+        acc = (acc * MONT_R_MOD_Q) % Q;
         zeta_value = 12'(acc);
     endfunction
 

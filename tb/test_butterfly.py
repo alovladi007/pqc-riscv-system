@@ -24,15 +24,27 @@ from cocotb.triggers import RisingEdge, Timer
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "python"))
 
-from mod_arith import Q  # noqa: E402
+from mod_arith import Q, MONT_R_MOD_Q  # noqa: E402
 
 CLOCK_PERIOD_NS = 10
 
 
-def butterfly_ref(a, b, zeta):
-    """Spec-form Cooley-Tukey butterfly. Output in canonical [0, q)."""
-    t = (zeta * b) % Q
+def butterfly_ref(a, b, zeta_canonical):
+    """Spec-form Cooley-Tukey butterfly. Output in canonical [0, q).
+
+    Takes zeta in canonical form. The RTL butterfly expects zeta already
+    in Montgomery form (so its internal Montgomery reduce of zeta*b
+    produces a canonical result). The testbench is responsible for
+    converting zeta to Montgomery form before driving the DUT — this
+    reference computes against the canonical form for clarity.
+    """
+    t = (zeta_canonical * b) % Q
     return (a + t) % Q, (a - t) % Q
+
+
+def to_montgomery(x):
+    """Convert canonical x in [0, Q) to Montgomery form: (x * R) mod Q."""
+    return (x * MONT_R_MOD_Q) % Q
 
 
 async def reset(dut):
@@ -46,11 +58,16 @@ async def reset(dut):
     await RisingEdge(dut.clk)
 
 
-async def issue_and_capture(dut, a, b, zeta):
-    """Apply one butterfly op and capture the output 3 cycles later."""
+async def issue_and_capture(dut, a, b, zeta_canonical):
+    """Apply one butterfly op and capture the output 3 cycles later.
+
+    `zeta_canonical` is the mathematical twiddle value; we convert it
+    to Montgomery form before driving the DUT, because the RTL
+    Montgomery-reduces zeta*b internally.
+    """
     dut.a.value        = a
     dut.b.value        = b
-    dut.zeta.value     = zeta
+    dut.zeta.value     = to_montgomery(zeta_canonical)
     dut.valid_in.value = 1
     await RisingEdge(dut.clk)
     dut.valid_in.value = 0
