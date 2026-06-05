@@ -116,30 +116,33 @@ module sha3_256 (
     logic [5:0]   out_idx;          // 0..31 squeeze byte counter
     logic [63:0]  squeeze_lane;     // latched lane during squeeze
     logic         seen_last;        // last byte already absorbed — final padded block
-    logic         first_block;      // first XOR-pass of a new run: overwrite
-                                    // state instead of XORing — sidesteps the
-                                    // need to clear keccak's state register on
-                                    // each new sha3 call (rst_n doesn't clear
-                                    // state under Icarus, so leftovers from a
-                                    // previous run would corrupt the new one).
+    logic [4:0]   clear_idx;        // 0..24 lane being zeroed at start of run.
+                                    // keccak_f1600's state register isn't
+                                    // cleared by rst_n under Icarus, and the
+                                    // sponge XOR loop only writes 17 of 25
+                                    // lanes (the rate portion). Without an
+                                    // explicit clear pass, the 8 capacity
+                                    // lanes retain values from a previous
+                                    // call and corrupt the new permutation.
 
     // ---------------------------------------------------------------------
     // FSM
     // ---------------------------------------------------------------------
     typedef enum logic [3:0] {
         S_IDLE          = 4'd0,
-        S_ABSORB        = 4'd1,
-        S_PAD           = 4'd2,
-        S_XOR_READ      = 4'd3,
-        S_XOR_WAIT      = 4'd4,
-        S_XOR_LOAD      = 4'd5,
-        S_PERMUTE_START = 4'd6,
-        S_PERMUTE_WAIT  = 4'd7,
-        S_SQ_READ       = 4'd8,
-        S_SQ_WAIT       = 4'd9,
-        S_SQ_LATCH      = 4'd10,
-        S_SQ_EMIT       = 4'd11,
-        S_DONE          = 4'd12
+        S_INIT_CLEAR    = 4'd1,
+        S_ABSORB        = 4'd2,
+        S_PAD           = 4'd3,
+        S_XOR_READ      = 4'd4,
+        S_XOR_WAIT      = 4'd5,
+        S_XOR_LOAD      = 4'd6,
+        S_PERMUTE_START = 4'd7,
+        S_PERMUTE_WAIT  = 4'd8,
+        S_SQ_READ       = 4'd9,
+        S_SQ_WAIT       = 4'd10,
+        S_SQ_LATCH      = 4'd11,
+        S_SQ_EMIT       = 4'd12,
+        S_DONE          = 4'd13
     } state_e;
 
     state_e state, state_next;
@@ -171,7 +174,8 @@ module sha3_256 (
     always_comb begin
         state_next = state;
         unique case (state)
-            S_IDLE          : if (start)              state_next = S_ABSORB;
+            S_IDLE          : if (start)              state_next = S_INIT_CLEAR;
+            S_INIT_CLEAR    : if (clear_idx == 5'd24) state_next = S_ABSORB;
             S_ABSORB        : begin
                 // Priority: full block boundary first (we permute then
                 // either continue absorbing or go to S_PAD for the
@@ -231,7 +235,7 @@ module sha3_256 (
             kf_load_data <= '0;
             kf_read_addr <= '0;
             last_block_padded <= 1'b0;
-            first_block <= 1'b1;
+            clear_idx <= '0;
         end else begin
             // Default pulse-high signals
             kf_start   <= 1'b0;
@@ -250,7 +254,21 @@ module sha3_256 (
                         out_idx           <= '0;
                         seen_last         <= 1'b0;
                         last_block_padded <= 1'b0;
-                        first_block       <= 1'b1;
+                        clear_idx         <= '0;
+                    end
+                end
+
+                // -------------------------------------------------------
+                S_INIT_CLEAR: begin
+                    // Clear all 25 state lanes via the load port. Takes
+                    // 25 cycles. After the last load_en, advance to
+                    // S_ABSORB; the load_en NBA from clear_idx=24 will
+                    // commit at the start of S_ABSORB.
+                    kf_load_en   <= 1'b1;
+                    kf_load_addr <= clear_idx;
+                    kf_load_data <= 64'd0;
+                    if (clear_idx != 5'd24) begin
+                        clear_idx <= clear_idx + 5'd1;
                     end
                 end
 
@@ -310,12 +328,7 @@ module sha3_256 (
                 S_XOR_LOAD: begin
                     kf_load_en   <= 1'b1;
                     kf_load_addr <= lane_xy(merge_idx);
-                    // First block of a new run: overwrite state with the
-                    // padded data (state was potentially nonzero leftover
-                    // from a previous run). Subsequent blocks XOR.
-                    kf_load_data <= first_block
-                                    ? absorb_buf[merge_bit +: 64]
-                                    : (kf_read_data ^ absorb_buf[merge_bit +: 64]);
+                    kf_load_data <= kf_read_data ^ absorb_buf[merge_bit +: 64];
                     if (merge_idx != 5'(RATE_LANES - 1)) begin
                         merge_idx <= merge_idx + 5'd1;
                     end
@@ -330,7 +343,6 @@ module sha3_256 (
                         abs_byte_idx <= '0;
                         merge_idx    <= '0;
                         out_idx      <= '0;
-                        first_block  <= 1'b0;
                     end
                 end
 
