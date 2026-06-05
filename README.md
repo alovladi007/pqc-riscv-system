@@ -99,9 +99,11 @@ Python reference. CI runs them automatically on every push.
 **SystemVerilog RTL (Phase 3a)**
 - [x] `kyber_q_alu.sv` — Barrett + modular add/sub, 4 cocotb tests
 - [x] `ntt_butterfly.sv` — radix-2 Cooley-Tukey + Montgomery, 3 cocotb tests
-- [x] `ntt_engine.sv` — **full 256-pt in-place NTT, 10-state FSM,
-      internal twiddle ROM, byte-exact match to python/ntt_ref.py over
-      4 cocotb tests (zero / delta / two random seeds)**
+- [x] `ntt_inv_butterfly.sv` — radix-2 Gentleman-Sande + Montgomery
+- [x] `ntt_engine.sv` — **full 256-pt in-place forward + inverse NTT,
+      16-state FSM, internal twiddle ROM, byte-exact match to
+      python/ntt_ref.py over 8 cocotb tests (forward zero/delta/2 random,
+      inverse zero/delta/random, forward+inverse round-trip)**
 - [x] `keccak_round.sv` — single Keccak-f[1600] round, Verilator-clean
 - [x] `keccak_f1600.sv` — **24-round controller, byte-exact match to
       python/keccak_ref.py over 3 cocotb tests (zero / random /
@@ -110,8 +112,8 @@ Python reference. CI runs them automatically on every push.
 **CI** (green at HEAD)
 - `pytest` over the full Python suite — 69 tests pass
 - `verilator --lint-only -Wall` on every RTL module
-- cocotb (Icarus) for q_alu (4/4), butterfly (3/3), ntt_engine (4/4),
-  **keccak_f1600 (3/3)**
+- cocotb (Icarus) for q_alu (4/4), butterfly (3/3),
+  **ntt_engine forward+inverse (8/8), keccak_f1600 (3/3)** — 18 tests total
 
 ## Phase 3b — Keccak cocotb fix shipped
 
@@ -137,11 +139,27 @@ Fix (commit `7814b0a`): pack the ports into 1600-bit bit-vectors and
 unpack internally. Algorithm unchanged; verification path now binds
 cleanly through cocotb. All three keccak tests pass in CI.
 
-## What's coming next
+## Phase 3c — Inverse NTT shipped
 
-**Phase 3c** (NTT-side work)
-- [ ] Inverse NTT (Gentleman-Sande butterfly + reversed schedule),
-      currently a no-op port on `ntt_engine.sv`
+`ntt_engine.sv` now implements both directions. The `inverse` input
+selects:
+
+- **inverse=0** — Cooley-Tukey butterfly, schedule length=128..2
+  halving with k=1..127 incrementing (forward NTT, byte-exact to
+  pq-crystals/kyber `poly_ntt()` semantics).
+- **inverse=1** — Gentleman-Sande butterfly
+  (`rtl/ntt_inv_butterfly.sv`), schedule length=2..128 doubling with
+  k=127..1 decrementing, followed by a 256-cycle final scaling pass
+  `mem[j] <- f_inv * mem[j] mod q` where `f_inv = 128⁻¹ mod 3329 = 3303`
+  (Kyber uses an incomplete NTT with 7 halvings, so the scaling
+  factor is `n/2⁻¹` not `n⁻¹`). The scaling pass reuses the forward
+  butterfly with `a=0, zeta=MONT_F_INV=512` so its output `a_out =
+  f_inv * coef mod q`. No new arithmetic unit needed.
+
+The strongest correctness test, `ntt_round_trip`, confirms forward
+then inverse reproduces a random 256-coefficient input bit-exactly.
+
+## What's coming next
 
 **Phase 4** (synthesis + integration)
 - [ ] RoCC-style wrapper for CV32E40P integration
