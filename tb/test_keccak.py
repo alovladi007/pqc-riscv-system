@@ -10,7 +10,7 @@ import random
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, Timer, ReadOnly, NextTimeStep
+from cocotb.triggers import RisingEdge, Timer, ReadOnly, NextTimeStep, ReadWrite
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "python"))
@@ -50,16 +50,22 @@ async def read_state(dut):
     keccak_f1600.sv registers read_data via:
         always_ff @(posedge clk) read_data <= state[read_addr];
 
-    So the read pattern is: set read_addr, wait for the clock edge that
-    samples it, wait one more edge so the NBA settles, then sample.
-    Robust under both Icarus and Verilator.
+    Cocotb timeline per lane:
+      1. write read_addr = i        (active region)
+      2. RisingEdge                  (posedge — NBA evaluates: read_data <= state[i])
+      3. RisingEdge                  (next posedge — NBA settles into read_data)
+      4. ReadOnly                    (post-NBA — read_data is observable)
+      5. sample read_data
+      6. NextTimeStep                (escape ReadOnly so the next iter can write read_addr)
     """
     out = []
     for i in range(NUM_LANES):
         dut.read_addr.value = i
-        await RisingEdge(dut.clk)   # this edge samples read_addr=i
-        await RisingEdge(dut.clk)   # this edge propagates the NBA into read_data
+        await RisingEdge(dut.clk)
+        await RisingEdge(dut.clk)
+        await ReadOnly()
         out.append(int(dut.read_data.value))
+        await NextTimeStep()
     return out
 
 

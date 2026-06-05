@@ -66,18 +66,16 @@ async def load_poly(dut, poly):
 async def read_poly(dut):
     """Read all 256 coefficients via the registered read port.
 
-    ntt_engine.sv registers read_data via:
-        always_ff @(posedge clk) read_data <= mem[read_addr];
-
-    So: set read_addr, wait two clock edges (first samples read_addr,
-    second propagates the NBA into read_data), then sample.
+    Same RisingEdge × 2 + ReadOnly + NextTimeStep pattern as test_keccak.py.
     """
     out = []
     for i in range(N):
         dut.read_addr.value = i
         await RisingEdge(dut.clk)
         await RisingEdge(dut.clk)
+        await ReadOnly()
         out.append(int(dut.read_data.value))
+        await NextTimeStep()
     return out
 
 
