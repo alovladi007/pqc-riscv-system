@@ -50,6 +50,8 @@ jobs:
         run: verilator --lint-only -Wall -Wno-UNUSEDSIGNAL rtl/keccak_round.sv
       - name: Lint ntt_engine (with butterfly dep)
         run: verilator --lint-only -Wall -Wno-UNUSEDSIGNAL rtl/ntt_butterfly.sv rtl/ntt_engine.sv --top-module ntt_engine
+      - name: Lint keccak_f1600 (with keccak_round dep)
+        run: verilator --lint-only -Wall -Wno-UNUSEDSIGNAL rtl/keccak_round.sv rtl/keccak_f1600.sv --top-module keccak_f1600
 
   cocotb:
     name: cocotb (RTL vs Python golden model)
@@ -64,6 +66,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y iverilog
           pip install cocotb pytest hypothesis
-      - name: Run q_alu testbench
+      - name: q_alu testbench (Barrett + mod_add + mod_sub)
         working-directory: tb
         run: make q_alu
+      - name: butterfly testbench (Cooley-Tukey + Montgomery)
+        working-directory: tb
+        run: make butterfly
+      - name: ntt_engine testbench (full 256-pt NTT vs Python ref)
+        working-directory: tb
+        run: make ntt_engine
+      - name: keccak_f1600 testbench (24-round permutation vs Python ref)
+        working-directory: tb
+        run: make keccak
