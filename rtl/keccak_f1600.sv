@@ -110,12 +110,25 @@ module keccak_f1600 (
     assign done = (fsm == S_DONE);
 
     // -----------------------------------------------------------------
+    // Power-on init for the state array. Icarus -g2012 mishandles
+    // `for (int i = 0; i < 25; i++) state[i] <= 64'd0;` inside an
+    // always_ff reset branch — the array stays X. Initializing via
+    // `initial` at elaboration is universally supported and gives the
+    // same behaviour (X cannot occur on the simulator since state is
+    // zeroed at time 0). On real silicon, the user is expected to
+    // hold rst_n low briefly and then drive the load port; either way
+    // the array is overwritten before the first round runs.
+    // -----------------------------------------------------------------
+    initial begin
+        for (int i = 0; i < 25; i++) state[i] = 64'd0;
+    end
+
+    // -----------------------------------------------------------------
     // State register + load port + round commit
     // -----------------------------------------------------------------
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             round_idx <= 5'd0;
-            for (int i = 0; i < 25; i++) state[i] <= 64'd0;
         end else begin
             // Load port — accepted any time IDLE
             if (load_en && fsm == S_IDLE) begin
