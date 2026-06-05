@@ -49,7 +49,9 @@ module test_keccak_standalone;
             $display("=== %s ===", label);
             for (int i = 0; i < 25; i++) begin
                 read_addr = i[4:0];
-                #1;
+                @(posedge clk);  // address is sampled at this edge
+                @(posedge clk);  // read_data NBA settles at this edge
+                #1;              // tiny delta to escape the active region
                 $display("  state[%0d] = 0x%016h", i, read_data);
             end
         end
@@ -98,6 +100,8 @@ module test_keccak_standalone;
 
         // Check the canonical value
         read_addr = 0;
+        @(posedge clk);
+        @(posedge clk);
         #1;
         if (read_data == 64'hF1258F7940E1DDE7)
             $display("PASS: lane 0 matches published 0xF1258F7940E1DDE7");

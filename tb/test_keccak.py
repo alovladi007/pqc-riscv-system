@@ -50,13 +50,13 @@ async def read_state(dut):
     keccak_f1600.sv registers read_data via:
         always_ff @(posedge clk) read_data <= state[read_addr];
 
-    Cocotb timeline per lane:
-      1. write read_addr = i        (active region)
-      2. RisingEdge                  (posedge — NBA evaluates: read_data <= state[i])
-      3. RisingEdge                  (next posedge — NBA settles into read_data)
-      4. ReadOnly                    (post-NBA — read_data is observable)
-      5. sample read_data
-      6. NextTimeStep                (escape ReadOnly so the next iter can write read_addr)
+    The pure-SV standalone testbench (tb/test_keccak_standalone.sv) proves
+    the RTL produces 0xF1258F7940E1DDE7 on lane 0 after f^24(0). So any
+    failure here is cocotb sampling, not RTL.
+
+    First we sample as the LogicArray binstr, find any 'x' bits, then if
+    clean, convert to int. If the binstr has x bits, raise with the
+    actual bit pattern so we can see WHICH bits are problematic.
     """
     out = []
     for i in range(NUM_LANES):
@@ -64,7 +64,13 @@ async def read_state(dut):
         await RisingEdge(dut.clk)
         await RisingEdge(dut.clk)
         await ReadOnly()
-        out.append(int(dut.read_data.value))
+        binstr = dut.read_data.value.binstr
+        if 'x' in binstr.lower() or 'z' in binstr.lower():
+            await NextTimeStep()
+            raise AssertionError(
+                f"lane {i}: read_data has non-0/1 bits: '{binstr}'"
+            )
+        out.append(int(binstr, 2))
         await NextTimeStep()
     return out
 
