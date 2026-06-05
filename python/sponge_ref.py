@@ -135,3 +135,46 @@ def shake_256(data: bytes, outlen: int) -> bytes:
     state = [0] * 25
     state = _absorb(state, data, RATE_SHAKE_256, DOMAIN_SHAKE)
     return _squeeze(state, RATE_SHAKE_256, outlen)
+
+
+# ---------------------------------------------------------------------------
+# sample_ntt with fixed XOF window
+#
+# Models the rtl/sample_ntt.sv module exactly: request a fixed number of
+# bytes from SHAKE-128, then run Kyber's rejection-sample loop over the
+# resulting stream. Matches the canonical poly.sample_ntt for any
+# xof_bytes large enough to produce 256 accepts (failure probability is
+# negligible at 1024 bytes — mean acceptance is ~81% so we expect ~552
+# accepts from 1024 bytes ÷ 3 = 341 candidate triples × 2 candidates).
+# ---------------------------------------------------------------------------
+
+_KYBER_Q = 3329
+_KYBER_N = 256
+
+def sample_ntt_from_seed(seed: bytes, xof_bytes: int = 1024) -> list:
+    """Reference implementation for rtl/sample_ntt.sv.
+
+    Reads `xof_bytes` from SHAKE-128(seed), processes them 3 at a time
+    (extracting two 12-bit candidates), accepts each candidate < q until
+    we have 256 accepted. Raises ValueError if the XOF window is too
+    small.
+    """
+    stream = shake_128(seed, xof_bytes)
+    out = []
+    i = 0
+    while len(out) < _KYBER_N and i + 2 < len(stream):
+        b0, b1, b2 = stream[i], stream[i + 1], stream[i + 2]
+        i += 3
+        d1 = b0 | ((b1 & 0x0F) << 8)
+        d2 = (b1 >> 4) | (b2 << 4)
+        if d1 < _KYBER_Q:
+            out.append(d1)
+            if len(out) == _KYBER_N:
+                break
+        if d2 < _KYBER_Q:
+            out.append(d2)
+    if len(out) < _KYBER_N:
+        raise ValueError(
+            f"sample_ntt_from_seed: only {len(out)} accepts from {xof_bytes} bytes"
+        )
+    return out

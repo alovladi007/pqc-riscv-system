@@ -58,6 +58,8 @@ jobs:
         run: verilator --lint-only -Wall -Wno-UNUSEDSIGNAL rtl/keccak_round.sv rtl/keccak_f1600.sv rtl/sha3_256.sv --top-module sha3_256
       - name: Lint shake_128 (with keccak deps)
         run: verilator --lint-only -Wall -Wno-UNUSEDSIGNAL rtl/keccak_round.sv rtl/keccak_f1600.sv rtl/shake_128.sv --top-module shake_128
+      - name: Lint sample_ntt (with shake + keccak deps)
+        run: verilator --lint-only -Wall -Wno-UNUSEDSIGNAL rtl/keccak_round.sv rtl/keccak_f1600.sv rtl/shake_128.sv rtl/sample_ntt.sv --top-module sample_ntt
 
   cocotb:
     name: cocotb (RTL vs Python golden model)
@@ -90,3 +92,6 @@ jobs:
       - name: shake_128 testbench (arbitrary-output sponge vs Python ref)
         working-directory: tb
         run: make shake_128
+      - name: sample_ntt testbench (Kyber matrix-A rejection sampler)
+        working-directory: tb
+        run: make sample_ntt
