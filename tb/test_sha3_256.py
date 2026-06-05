@@ -33,6 +33,7 @@ OUT_BYTES = 32
 
 async def reset(dut):
     dut.rst_n.value    = 0
+    dut.start.value    = 0
     dut.in_valid.value = 0
     dut.in_byte.value  = 0
     dut.in_last.value  = 0
@@ -90,6 +91,10 @@ async def collect_output(dut, n_bytes=OUT_BYTES, cycle_cap=4000):
 async def run_sha3_256(dut, msg):
     cocotb.start_soon(Clock(dut.clk, CLOCK_PERIOD_NS, units="ns").start())
     await reset(dut)
+    # Pulse start to begin a new hash
+    dut.start.value = 1
+    await RisingEdge(dut.clk)
+    dut.start.value = 0
     await push_message(dut, msg)
     got = await collect_output(dut)
     expected = sha3_256(msg)
