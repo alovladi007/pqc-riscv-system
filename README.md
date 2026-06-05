@@ -108,12 +108,22 @@ Python reference. CI runs them automatically on every push.
 - [x] `keccak_f1600.sv` — **24-round controller, byte-exact match to
       python/keccak_ref.py over 3 cocotb tests (zero / random /
       f∘f compose)**
+- [x] `sha3_256.sv` — **SHA3-256 sponge wrapping keccak_f1600;
+      byte-streaming interface, rate=136, domain=0x06; 6 cocotb tests
+      vs python/sponge_ref.sha3_256 including the published "abc" KAT
+      and rate-boundary stress cases**
+
+**Python (Phase 4a)**
+- [x] `python/sponge_ref.py` — full sponge layer (SHA3-256/512 +
+      SHAKE-128/256) on top of keccak_ref; 62 tests cross-validate
+      against `hashlib`
 
 **CI** (green at HEAD)
-- `pytest` over the full Python suite — 69 tests pass
+- `pytest` over the full Python suite — **131 tests pass** (NTT/Kyber 69 + sponge 62)
 - `verilator --lint-only -Wall` on every RTL module
-- cocotb (Icarus) for q_alu (4/4), butterfly (3/3),
-  **ntt_engine forward+inverse (8/8), keccak_f1600 (3/3)** — 18 tests total
+- cocotb (Icarus): q_alu (4/4), butterfly (3/3),
+  **ntt_engine forward+inverse (8/8), keccak_f1600 (3/3), sha3_256 (6/6)**
+  — **24 cocotb tests**
 
 ## Phase 3b — Keccak cocotb fix shipped
 
