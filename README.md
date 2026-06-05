@@ -121,18 +121,28 @@ Python reference. CI runs them automatically on every push.
       accepts each < q until 256 coefficients collected. 3 cocotb
       tests verify coef-by-coef against `sample_ntt_from_seed`
       Python ref**
+- [x] `shake_256.sv` — **SHAKE-256 sponge (rate=136, domain=0x1F)
+      with arbitrary output length; sed-derived from shake_128, same
+      FSM**
+- [x] `sample_poly_cbd2.sv` — **Kyber η=2 noise sampler. 32-byte
+      sigma + 1-byte nonce → SHAKE-256(128 bytes) → 256 noise
+      coefficients in {-2, -1, 0, 1, 2} mod q via the centered
+      binomial. 3 cocotb tests verify against Python ref + assert
+      output lands in the valid set {0, 1, 2, q-2, q-1}**
 
 **Python (Phase 4a)**
 - [x] `python/sponge_ref.py` — full sponge layer (SHA3-256/512 +
-      SHAKE-128/256) on top of keccak_ref + Kyber sample_ntt_from_seed;
-      62 tests cross-validate the sponge against `hashlib`
+      SHAKE-128/256) on top of keccak_ref + Kyber
+      sample_ntt_from_seed + sample_cbd2_from_seed; 62 tests
+      cross-validate the sponge against `hashlib`
 
 **CI** (green at HEAD)
 - `pytest` over the full Python suite — **131 tests pass** (NTT/Kyber 69 + sponge 62)
 - `verilator --lint-only -Wall` on every RTL module
 - cocotb (Icarus): q_alu (4/4), butterfly (3/3), ntt_engine (8/8),
-  keccak_f1600 (3/3), sha3_256 (6/6), shake_128 (5/5), sample_ntt (3/3)
-  — **32 cocotb tests**
+  keccak_f1600 (3/3), sha3_256 (6/6), shake_128 (5/5), sample_ntt (3/3),
+  sample_poly_cbd2 (3/3)
+  — **35 cocotb tests**
 
 ## Phase 3b — Keccak cocotb fix shipped
 
