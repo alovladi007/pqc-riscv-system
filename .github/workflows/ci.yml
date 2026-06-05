@@ -56,6 +56,8 @@ jobs:
         run: verilator --lint-only -Wall -Wno-UNUSEDSIGNAL rtl/keccak_round.sv rtl/keccak_f1600.sv --top-module keccak_f1600
       - name: Lint sha3_256 (with keccak deps)
         run: verilator --lint-only -Wall -Wno-UNUSEDSIGNAL rtl/keccak_round.sv rtl/keccak_f1600.sv rtl/sha3_256.sv --top-module sha3_256
+      - name: Lint shake_128 (with keccak deps)
+        run: verilator --lint-only -Wall -Wno-UNUSEDSIGNAL rtl/keccak_round.sv rtl/keccak_f1600.sv rtl/shake_128.sv --top-module shake_128
 
   cocotb:
     name: cocotb (RTL vs Python golden model)
@@ -85,3 +87,6 @@ jobs:
       - name: sha3_256 testbench (full sponge vs Python ref / hashlib)
         working-directory: tb
         run: make sha3_256
+      - name: shake_128 testbench (arbitrary-output sponge vs Python ref)
+        working-directory: tb
+        run: make shake_128
