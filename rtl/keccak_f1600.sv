@@ -173,6 +173,10 @@ module keccak_f1600 (
             if (fsm == S_RUN) begin
                 for (int i = 0; i < 25; i++) state[i] <= round_out[i];
                 round_idx <= round_idx + 5'd1;
+                // DEBUG (Phase 3b): trace round-commit so we can tell from
+                // CI log whether the simulator is running this block at all.
+                $display("[KECCAK_DEBUG] t=%0t round=%0d state[0]_in=0x%016h round_out[0]=0x%016h",
+                         $time, round_idx, state[0], round_out[0]);
             end
         end
     end
