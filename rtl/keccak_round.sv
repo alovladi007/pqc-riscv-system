@@ -91,8 +91,10 @@ module keccak_round (
     generate
         for (gx = 0; gx < 5; gx++) begin : g_pi_x
             for (gy = 0; gy < 5; gy++) begin : g_pi_y
+                // Widen the 7-bit rho_offset return to the 32-bit int unsigned
+                // rotl64 expects, otherwise Verilator emits WIDTHEXPAND.
                 assign B[5*gy + ((2*gx + 3*gy) % 5)] =
-                    rotl64(A_theta[5*gx + gy], rho_offset(5*gx + gy));
+                    rotl64(A_theta[5*gx + gy], 32'(rho_offset(5*gx + gy)));
             end
         end
     endgenerate
