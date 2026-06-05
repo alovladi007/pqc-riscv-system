@@ -61,17 +61,34 @@ module keccak_f1600 (
     // -----------------------------------------------------------------
     logic [63:0] state [0:24];
 
-    // Registered read port. A combinational `assign read_data =
-    // state[read_addr];` is functionally correct (verified in pure SV
-    // via tb/test_keccak_standalone.sv: every lane after f^24(0)
-    // matches the published Keccak-Team vector). But cocotb's VPI
-    // sampling under Icarus reads X across the comb-assign through an
-    // unpacked array index, even after a full clock edge + ReadOnly.
-    // Registering the output sidesteps the VPI race entirely and
-    // costs one cycle of read latency, which the test accommodates by
-    // waiting an extra RisingEdge per coefficient.
-    always_ff @(posedge clk) begin
-        read_data <= state[read_addr];
+    // Combinational read via a fully decoded case statement.
+    //
+    // Background: a `assign read_data = state[read_addr];` style read
+    // (selecting from an unpacked array by variable index) is correct
+    // semantically and works in pure-SV testbenches under Icarus
+    // (proved by tb/test_keccak_standalone.sv: lane 0 after f^24(0)
+    // matches 0xF1258F7940E1DDE7). But cocotb's VPI binding under
+    // Icarus reads X across that path — including with `always_ff
+    // read_data <= state[read_addr]` registered version. Decoding
+    // read_addr explicitly through a unique case statement avoids the
+    // unpacked-array-by-variable-index path entirely.
+    always_comb begin
+        unique case (read_addr)
+            5'd0:  read_data = state[0];   5'd1:  read_data = state[1];
+            5'd2:  read_data = state[2];   5'd3:  read_data = state[3];
+            5'd4:  read_data = state[4];   5'd5:  read_data = state[5];
+            5'd6:  read_data = state[6];   5'd7:  read_data = state[7];
+            5'd8:  read_data = state[8];   5'd9:  read_data = state[9];
+            5'd10: read_data = state[10];  5'd11: read_data = state[11];
+            5'd12: read_data = state[12];  5'd13: read_data = state[13];
+            5'd14: read_data = state[14];  5'd15: read_data = state[15];
+            5'd16: read_data = state[16];  5'd17: read_data = state[17];
+            5'd18: read_data = state[18];  5'd19: read_data = state[19];
+            5'd20: read_data = state[20];  5'd21: read_data = state[21];
+            5'd22: read_data = state[22];  5'd23: read_data = state[23];
+            5'd24: read_data = state[24];
+            default: read_data = 64'd0;
+        endcase
     end
 
     // -----------------------------------------------------------------

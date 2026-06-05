@@ -45,32 +45,19 @@ async def load_state(dut, state):
 
 
 async def read_state(dut):
-    """Read all 25 lanes via the registered read port.
+    """Read all 25 lanes via the case-decoded combinational read port.
 
-    keccak_f1600.sv registers read_data via:
-        always_ff @(posedge clk) read_data <= state[read_addr];
-
-    The pure-SV standalone testbench (tb/test_keccak_standalone.sv) proves
-    the RTL produces 0xF1258F7940E1DDE7 on lane 0 after f^24(0). So any
-    failure here is cocotb sampling, not RTL.
-
-    First we sample as the LogicArray binstr, find any 'x' bits, then if
-    clean, convert to int. If the binstr has x bits, raise with the
-    actual bit pattern so we can see WHICH bits are problematic.
+    keccak_f1600.sv selects state[read_addr] via a fully decoded case
+    statement to avoid cocotb-on-Icarus VPI's trouble with
+    unpacked-array-by-variable-index. Read pattern: set address,
+    RisingEdge, ReadOnly, sample, NextTimeStep.
     """
     out = []
     for i in range(NUM_LANES):
         dut.read_addr.value = i
         await RisingEdge(dut.clk)
-        await RisingEdge(dut.clk)
         await ReadOnly()
-        binstr = dut.read_data.value.binstr
-        if 'x' in binstr.lower() or 'z' in binstr.lower():
-            await NextTimeStep()
-            raise AssertionError(
-                f"lane {i}: read_data has non-0/1 bits: '{binstr}'"
-            )
-        out.append(int(binstr, 2))
+        out.append(int(dut.read_data.value))
         await NextTimeStep()
     return out
 
