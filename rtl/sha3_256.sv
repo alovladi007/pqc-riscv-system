@@ -157,13 +157,21 @@ module sha3_256 (
     logic [10:0] merge_bit;
     assign merge_bit = {6'd0, merge_idx} * 11'd64;
 
+    // Extra flag for the rate-boundary case (input length % rate == 0)
+    // where we permute the data block first, then need to absorb an
+    // empty padded block before squeezing.
+    logic last_block_padded;
+
     always_comb begin
         state_next = state;
         unique case (state)
             S_IDLE          : if (start)              state_next = S_ABSORB;
             S_ABSORB        : begin
-                if (in_valid && in_last)              state_next = S_PAD;
-                else if (in_valid && full_block_filled) state_next = S_XOR_READ;
+                // Priority: full block boundary first (we permute then
+                // either continue absorbing or go to S_PAD for the
+                // empty padding block); in_last alone triggers padding.
+                if (in_valid && full_block_filled)    state_next = S_XOR_READ;
+                else if (in_valid && in_last)         state_next = S_PAD;
             end
             S_PAD           :                          state_next = S_XOR_READ;
             S_XOR_READ      :                          state_next = S_XOR_WAIT;
@@ -174,8 +182,10 @@ module sha3_256 (
             end
             S_PERMUTE_START :                          state_next = S_PERMUTE_WAIT;
             S_PERMUTE_WAIT  : if (kf_done) begin
-                if (seen_last) state_next = S_SQ_READ;
-                else           state_next = S_ABSORB;
+                // Three exit paths from the post-permute wait:
+                if (seen_last && last_block_padded)    state_next = S_SQ_READ;
+                else if (seen_last)                    state_next = S_PAD;   // empty padding block
+                else                                   state_next = S_ABSORB;
             end
             S_SQ_READ       :                          state_next = S_SQ_WAIT;
             S_SQ_WAIT       :                          state_next = S_SQ_LATCH;
@@ -214,6 +224,7 @@ module sha3_256 (
             kf_load_addr <= '0;
             kf_load_data <= '0;
             kf_read_addr <= '0;
+            last_block_padded <= 1'b0;
         end else begin
             // Default pulse-high signals
             kf_start   <= 1'b0;
@@ -225,12 +236,13 @@ module sha3_256 (
                     // On start: clear buffers + counters in preparation
                     // for the absorb phase that begins next cycle.
                     if (start) begin
-                        absorb_buf   <= '0;
-                        abs_lane_idx <= '0;
-                        abs_byte_idx <= '0;
-                        merge_idx    <= '0;
-                        out_idx      <= '0;
-                        seen_last    <= 1'b0;
+                        absorb_buf        <= '0;
+                        abs_lane_idx      <= '0;
+                        abs_byte_idx      <= '0;
+                        merge_idx         <= '0;
+                        out_idx           <= '0;
+                        seen_last         <= 1'b0;
+                        last_block_padded <= 1'b0;
                     end
                 end
 
@@ -279,7 +291,11 @@ module sha3_256 (
                     if (buf_byte_bit == 11'(LAST_BIT)) begin
                         absorb_buf[LAST_BIT +: 8] <= DOMAIN | 8'h80;
                     end
-                    merge_idx <= '0;
+                    merge_idx         <= '0;
+                    last_block_padded <= 1'b1;
+                    // DEBUG (Phase 4b):
+                    $display("[SHA3_PAD] t=%0t lane=%0d byte=%0d buf_bit=%0d",
+                             $time, abs_lane_idx, abs_byte_idx, buf_byte_bit);
                 end
 
                 // -------------------------------------------------------
@@ -293,6 +309,10 @@ module sha3_256 (
                     if (merge_idx != 5'(RATE_LANES - 1)) begin
                         merge_idx <= merge_idx + 5'd1;
                     end
+                    // DEBUG (Phase 4b):
+                    $display("[SHA3_XOR] t=%0t merge=%0d lane=%0d buf=0x%016h read=0x%016h",
+                             $time, merge_idx, lane_xy(merge_idx),
+                             absorb_buf[merge_bit +: 64], kf_read_data);
                 end
 
                 S_PERMUTE_START: kf_start <= 1'b1;
@@ -310,7 +330,11 @@ module sha3_256 (
                 // -------------------------------------------------------
                 S_SQ_READ : kf_read_addr <= lane_xy({2'd0, out_idx[5:3]});
                 S_SQ_WAIT : ;
-                S_SQ_LATCH: squeeze_lane <= kf_read_data;
+                S_SQ_LATCH: begin
+                    squeeze_lane <= kf_read_data;
+                    $display("[SHA3_SQ ] t=%0t out_idx=%0d lane=%0d read_data=0x%016h",
+                             $time, out_idx, lane_xy({2'd0, out_idx[5:3]}), kf_read_data);
+                end
                 S_SQ_EMIT : begin
                     if (out_idx != 6'(OUT_BYTES - 1)) begin
                         out_idx <= out_idx + 6'd1;
