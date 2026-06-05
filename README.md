@@ -103,35 +103,43 @@ Python reference. CI runs them automatically on every push.
       internal twiddle ROM, byte-exact match to python/ntt_ref.py over
       4 cocotb tests (zero / delta / two random seeds)**
 - [x] `keccak_round.sv` — single Keccak-f[1600] round, Verilator-clean
-- [x] `keccak_f1600.sv` — 24-round controller (elaborates; cocotb
-      paused, Phase 3b — see below)
+- [x] `keccak_f1600.sv` — **24-round controller, byte-exact match to
+      python/keccak_ref.py over 3 cocotb tests (zero / random /
+      f∘f compose)**
 
 **CI** (green at HEAD)
 - `pytest` over the full Python suite — 69 tests pass
 - `verilator --lint-only -Wall` on every RTL module
-- cocotb (Icarus) for q_alu (4/4), butterfly (3/3), ntt_engine (4/4)
+- cocotb (Icarus) for q_alu (4/4), butterfly (3/3), ntt_engine (4/4),
+  **keccak_f1600 (3/3)**
 
-## Known: Keccak cocotb paused — Phase 3b
+## Phase 3b — Keccak cocotb fix shipped
 
-The `keccak_f1600` cocotb test reads X from the read port under
-Icarus even after the load port writes deterministic values.
-Verilator lint is clean, the Python reference matches the published
-f^24(0) constant, and the RTL elaborates cleanly under both Verilator
-and Icarus. The remaining bug looks Icarus-specific in how it binds
-the unpacked array `state[0:24]` across the comb-assign read port and
-the always_ff write path. Two attempted fixes (init in `initial`
-instead of always_ff reset; full-clock wait between read_addr change
-and sample) didn't shift it.
+Phase 3a left `make keccak` paused on an Icarus VPI binding bug:
+state-array reads returned all-X under cocotb even though the same
+RTL produced canonical Keccak-Team `f^24(0) = 0xF1258F7940E1DDE7` in
+a pure-SV testbench (`tb/test_keccak_standalone.sv`).
 
-The RTL and Python reference stay in the tree — both are needed for
-Phase 4. The CI step is commented out, not removed, with the symptom
-and fix candidates documented in `.github/workflows/ci.yml`.
+Root cause was the `keccak_round` port signature using unpacked
+arrays:
+
+```sv
+input  wire [63:0] state_in [0:24]
+output logic [63:0] state_out [0:24]
+```
+
+Icarus's VPI under cocotb does not propagate driver values through
+unpacked-array module ports — `state_in` arrived all-X even when the
+calling register held correct values, so `round_out` went X and
+propagated forward.
+
+Fix (commit `7814b0a`): pack the ports into 1600-bit bit-vectors and
+unpack internally. Algorithm unchanged; verification path now binds
+cleanly through cocotb. All three keccak tests pass in CI.
 
 ## What's coming next
 
-**Phase 3b** (immediate)
-- [ ] Debug the Icarus-specific keccak read-X issue and re-enable
-      `make keccak` in CI
+**Phase 3c** (NTT-side work)
 - [ ] Inverse NTT (Gentleman-Sande butterfly + reversed schedule),
       currently a no-op port on `ntt_engine.sv`
 
