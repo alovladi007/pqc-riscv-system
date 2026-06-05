@@ -54,6 +54,8 @@ jobs:
         run: verilator --lint-only -Wall -Wno-UNUSEDSIGNAL rtl/ntt_butterfly.sv rtl/ntt_inv_butterfly.sv rtl/ntt_engine.sv --top-module ntt_engine
       - name: Lint keccak_f1600 (with keccak_round dep)
         run: verilator --lint-only -Wall -Wno-UNUSEDSIGNAL rtl/keccak_round.sv rtl/keccak_f1600.sv --top-module keccak_f1600
+      - name: Lint sha3_256 (with keccak deps)
+        run: verilator --lint-only -Wall -Wno-UNUSEDSIGNAL rtl/keccak_round.sv rtl/keccak_f1600.sv rtl/sha3_256.sv --top-module sha3_256
 
   cocotb:
     name: cocotb (RTL vs Python golden model)
@@ -80,3 +82,6 @@ jobs:
       - name: keccak_f1600 testbench (24-round permutation vs Python ref)
         working-directory: tb
         run: make keccak
+      - name: sha3_256 testbench (full sponge vs Python ref / hashlib)
+        working-directory: tb
+        run: make sha3_256
