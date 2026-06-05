@@ -116,6 +116,12 @@ module sha3_256 (
     logic [5:0]   out_idx;          // 0..31 squeeze byte counter
     logic [63:0]  squeeze_lane;     // latched lane during squeeze
     logic         seen_last;        // last byte already absorbed — final padded block
+    logic         first_block;      // first XOR-pass of a new run: overwrite
+                                    // state instead of XORing — sidesteps the
+                                    // need to clear keccak's state register on
+                                    // each new sha3 call (rst_n doesn't clear
+                                    // state under Icarus, so leftovers from a
+                                    // previous run would corrupt the new one).
 
     // ---------------------------------------------------------------------
     // FSM
@@ -225,6 +231,7 @@ module sha3_256 (
             kf_load_data <= '0;
             kf_read_addr <= '0;
             last_block_padded <= 1'b0;
+            first_block <= 1'b1;
         end else begin
             // Default pulse-high signals
             kf_start   <= 1'b0;
@@ -243,6 +250,7 @@ module sha3_256 (
                         out_idx           <= '0;
                         seen_last         <= 1'b0;
                         last_block_padded <= 1'b0;
+                        first_block       <= 1'b1;
                     end
                 end
 
@@ -293,9 +301,6 @@ module sha3_256 (
                     end
                     merge_idx         <= '0;
                     last_block_padded <= 1'b1;
-                    // DEBUG (Phase 4b):
-                    $display("[SHA3_PAD] t=%0t lane=%0d byte=%0d buf_bit=%0d",
-                             $time, abs_lane_idx, abs_byte_idx, buf_byte_bit);
                 end
 
                 // -------------------------------------------------------
@@ -305,14 +310,15 @@ module sha3_256 (
                 S_XOR_LOAD: begin
                     kf_load_en   <= 1'b1;
                     kf_load_addr <= lane_xy(merge_idx);
-                    kf_load_data <= kf_read_data ^ absorb_buf[merge_bit +: 64];
+                    // First block of a new run: overwrite state with the
+                    // padded data (state was potentially nonzero leftover
+                    // from a previous run). Subsequent blocks XOR.
+                    kf_load_data <= first_block
+                                    ? absorb_buf[merge_bit +: 64]
+                                    : (kf_read_data ^ absorb_buf[merge_bit +: 64]);
                     if (merge_idx != 5'(RATE_LANES - 1)) begin
                         merge_idx <= merge_idx + 5'd1;
                     end
-                    // DEBUG (Phase 4b):
-                    $display("[SHA3_XOR] t=%0t merge=%0d lane=%0d buf=0x%016h read=0x%016h",
-                             $time, merge_idx, lane_xy(merge_idx),
-                             absorb_buf[merge_bit +: 64], kf_read_data);
                 end
 
                 S_PERMUTE_START: kf_start <= 1'b1;
@@ -324,17 +330,14 @@ module sha3_256 (
                         abs_byte_idx <= '0;
                         merge_idx    <= '0;
                         out_idx      <= '0;
+                        first_block  <= 1'b0;
                     end
                 end
 
                 // -------------------------------------------------------
                 S_SQ_READ : kf_read_addr <= lane_xy({2'd0, out_idx[5:3]});
                 S_SQ_WAIT : ;
-                S_SQ_LATCH: begin
-                    squeeze_lane <= kf_read_data;
-                    $display("[SHA3_SQ ] t=%0t out_idx=%0d lane=%0d read_data=0x%016h",
-                             $time, out_idx, lane_xy({2'd0, out_idx[5:3]}), kf_read_data);
-                end
+                S_SQ_LATCH: squeeze_lane <= kf_read_data;
                 S_SQ_EMIT : begin
                     if (out_idx != 6'(OUT_BYTES - 1)) begin
                         out_idx <= out_idx + 6'd1;
