@@ -29,7 +29,7 @@ from cocotb.triggers import RisingEdge, Timer, ReadOnly, NextTimeStep
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "python"))
 
-from ntt_ref import ntt as ntt_golden, Q, N  # noqa: E402
+from ntt_ref import ntt as ntt_golden, inv_ntt as inv_ntt_golden, Q, N  # noqa: E402
 
 
 CLOCK_PERIOD_NS = 10
@@ -79,9 +79,15 @@ async def read_poly(dut):
     return out
 
 
-async def run_one_ntt(dut, poly):
-    """Load poly, run the NTT, return the output. Asserts done within budget."""
+async def run_one_ntt(dut, poly, inverse=0):
+    """Load poly, run the NTT (forward or inverse), return the output.
+
+    Asserts done within budget. The forward path is ~9000 cycles; the
+    inverse path adds 256 × ~6 cycles for the final scaling pass, well
+    within MAX_CYCLES_PER_NTT.
+    """
     await load_poly(dut, poly)
+    dut.inverse.value = inverse
     dut.start.value = 1
     await RisingEdge(dut.clk)
     dut.start.value = 0
@@ -163,3 +169,69 @@ def _first_mismatch_msg(got, expected, label):
                 f" more diffs)"
             )
     return f"{label}: lengths differ"
+
+
+# ---------------------------------------------------------------------------
+# Inverse NTT tests (Phase 3c)
+# ---------------------------------------------------------------------------
+
+@cocotb.test()
+async def inv_ntt_zero(dut):
+    """inv_NTT(0) must be 0."""
+    cocotb.start_soon(Clock(dut.clk, CLOCK_PERIOD_NS, units="ns").start())
+    await reset(dut)
+
+    got = await run_one_ntt(dut, [0] * N, inverse=1)
+    expected = inv_ntt_golden([0] * N)
+    assert got == expected, "zero inverse NTT mismatch: got nonzero coeffs"
+
+
+@cocotb.test()
+async def inv_ntt_delta(dut):
+    """inv_NTT(delta) — exercises the inverse butterfly path on a
+    controlled input. The Python reference is the oracle."""
+    cocotb.start_soon(Clock(dut.clk, CLOCK_PERIOD_NS, units="ns").start())
+    await reset(dut)
+
+    poly = [0] * N
+    poly[0] = 1
+    got = await run_one_ntt(dut, poly, inverse=1)
+    expected = inv_ntt_golden(poly)
+    assert got == expected, _first_mismatch_msg(got, expected, "inv_delta")
+
+
+@cocotb.test()
+async def inv_ntt_random_seed_42(dut):
+    """Random polynomial through inverse NTT."""
+    cocotb.start_soon(Clock(dut.clk, CLOCK_PERIOD_NS, units="ns").start())
+    await reset(dut)
+
+    rng = random.Random(42)
+    poly = [rng.randrange(0, Q) for _ in range(N)]
+    got = await run_one_ntt(dut, poly, inverse=1)
+    expected = inv_ntt_golden(poly)
+    assert got == expected, _first_mismatch_msg(got, expected, "inv_random[42]")
+
+
+@cocotb.test()
+async def ntt_round_trip(dut):
+    """Forward then inverse NTT must reproduce the input bit-exactly.
+
+    This is the strongest correctness test: it covers both paths and
+    confirms the Montgomery pre-scaling and final n^-1 scale compose
+    correctly.
+    """
+    cocotb.start_soon(Clock(dut.clk, CLOCK_PERIOD_NS, units="ns").start())
+    await reset(dut)
+
+    rng = random.Random(0xC0FFEE)
+    original = [rng.randrange(0, Q) for _ in range(N)]
+
+    forward = await run_one_ntt(dut, original, inverse=0)
+    # The engine retains state across runs, but run_one_ntt re-loads
+    # via the load port — so we feed the forward output back in.
+    recovered = await run_one_ntt(dut, forward, inverse=1)
+
+    assert recovered == original, _first_mismatch_msg(
+        recovered, original, "round_trip"
+    )

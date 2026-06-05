@@ -35,7 +35,7 @@ ntt_engine:
 		SIM_BUILD=sim_build/ntt_engine \
 		MODULE=test_ntt_engine \
 		TOPLEVEL=ntt_engine \
-		VERILOG_SOURCES="$(RTL_DIR)/ntt_butterfly.sv $(RTL_DIR)/ntt_engine.sv"
+		VERILOG_SOURCES="$(RTL_DIR)/ntt_butterfly.sv $(RTL_DIR)/ntt_inv_butterfly.sv $(RTL_DIR)/ntt_engine.sv"
 
 keccak:
 	$(MAKE) -f Makefile.run \
