@@ -50,19 +50,39 @@ module keccak_round (
     // rho + pi step
     //   B[y, 2x+3y] = rotl(A_theta[x,y], r[x,y])
     // -----------------------------------------------------------------------
-    // Rotation offsets r[x][y]
-    localparam int RHO_OFFSET [0:24] = '{
-        // x = 0:        y=0  y=1  y=2  y=3  y=4
-        /* x=0 */         0,   36,   3,  41,  18,
-        /* x=1 */         1,   44,  10,  45,   2,
-        /* x=2 */        62,    6,  43,  15,  61,
-        /* x=3 */        28,   55,  25,  21,  56,
-        /* x=4 */        27,   20,  39,   8,  14
-    };
+    // Rotation offsets r[x][y].
+    // Written as a function (case statement) rather than a localparam array
+    // literal so Icarus Verilog accepts it — Icarus -g2012 mode rejects the
+    // SystemVerilog '{...} array initializer that Verilator accepts.
+    function automatic [6:0] rho_offset (input int unsigned xy);
+        unique case (xy)
+            // x=0
+             0:  rho_offset = 7'd0;   1:  rho_offset = 7'd36;
+             2:  rho_offset = 7'd3;   3:  rho_offset = 7'd41;
+             4:  rho_offset = 7'd18;
+            // x=1
+             5:  rho_offset = 7'd1;   6:  rho_offset = 7'd44;
+             7:  rho_offset = 7'd10;  8:  rho_offset = 7'd45;
+             9:  rho_offset = 7'd2;
+            // x=2
+            10:  rho_offset = 7'd62; 11:  rho_offset = 7'd6;
+            12:  rho_offset = 7'd43; 13:  rho_offset = 7'd15;
+            14:  rho_offset = 7'd61;
+            // x=3
+            15:  rho_offset = 7'd28; 16:  rho_offset = 7'd55;
+            17:  rho_offset = 7'd25; 18:  rho_offset = 7'd21;
+            19:  rho_offset = 7'd56;
+            // x=4
+            20:  rho_offset = 7'd27; 21:  rho_offset = 7'd20;
+            22:  rho_offset = 7'd39; 23:  rho_offset = 7'd8;
+            24:  rho_offset = 7'd14;
+            default: rho_offset = 7'd0;
+        endcase
+    endfunction
 
     logic [63:0] B [0:24];
 
-    function automatic [63:0] rotl64 (input [63:0] x, input int n);
+    function automatic [63:0] rotl64 (input [63:0] x, input int unsigned n);
         logic [127:0] dup;
         dup = {x, x};
         return (n == 0) ? x : dup[127-n -: 64];
@@ -72,7 +92,7 @@ module keccak_round (
         for (gx = 0; gx < 5; gx++) begin : g_pi_x
             for (gy = 0; gy < 5; gy++) begin : g_pi_y
                 assign B[5*gy + ((2*gx + 3*gy) % 5)] =
-                    rotl64(A_theta[5*gx + gy], RHO_OFFSET[5*gx + gy]);
+                    rotl64(A_theta[5*gx + gy], rho_offset(5*gx + gy));
             end
         end
     endgenerate
