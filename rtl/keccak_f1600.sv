@@ -60,7 +60,19 @@ module keccak_f1600 (
     // Permutation state: 25 × 64-bit lanes
     // -----------------------------------------------------------------
     logic [63:0] state [0:24];
-    assign read_data = state[read_addr];
+
+    // Registered read port. A combinational `assign read_data =
+    // state[read_addr];` is functionally correct (verified in pure SV
+    // via tb/test_keccak_standalone.sv: every lane after f^24(0)
+    // matches the published Keccak-Team vector). But cocotb's VPI
+    // sampling under Icarus reads X across the comb-assign through an
+    // unpacked array index, even after a full clock edge + ReadOnly.
+    // Registering the output sidesteps the VPI race entirely and
+    // costs one cycle of read latency, which the test accommodates by
+    // waiting an extra RisingEdge per coefficient.
+    always_ff @(posedge clk) begin
+        read_data <= state[read_addr];
+    end
 
     // -----------------------------------------------------------------
     // FSM declarations (declared before the keccak_round instance so

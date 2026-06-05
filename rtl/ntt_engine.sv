@@ -96,8 +96,12 @@ module ntt_engine #(
     // ---------------------------------------------------------------------
     logic [COEF_W-1:0] mem [0:N-1];
 
-    // Combinational readout port
-    assign read_data = mem[read_addr];
+    // Registered readout. Same rationale as keccak_f1600 — the cocotb VPI
+    // sampling under Icarus has trouble with comb assigns through unpacked
+    // array indices, so we register the output. One-cycle read latency.
+    always_ff @(posedge clk) begin
+        read_data <= mem[read_addr];
+    end
 
     // ---------------------------------------------------------------------
     // FSM

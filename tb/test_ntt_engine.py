@@ -64,20 +64,20 @@ async def load_poly(dut, poly):
 
 
 async def read_poly(dut):
-    """Read all 256 coefficients via the combinational read port.
+    """Read all 256 coefficients via the registered read port.
 
-    Same `RisingEdge -> ReadOnly` pattern as test_keccak.py. The NTT
-    test happened to pass without ReadOnly under Icarus, but the
-    pattern is the robust one — both tests now share it.
+    ntt_engine.sv registers read_data via:
+        always_ff @(posedge clk) read_data <= mem[read_addr];
+
+    So: set read_addr, wait two clock edges (first samples read_addr,
+    second propagates the NBA into read_data), then sample.
     """
     out = []
     for i in range(N):
         dut.read_addr.value = i
         await RisingEdge(dut.clk)
-        await ReadOnly()
+        await RisingEdge(dut.clk)
         out.append(int(dut.read_data.value))
-        # Exit read-only so the next iteration's signal write is accepted.
-        await NextTimeStep()
     return out
 
 

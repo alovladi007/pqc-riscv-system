@@ -45,27 +45,21 @@ async def load_state(dut, state):
 
 
 async def read_state(dut):
-    """Read all 25 lanes via the combinational read port.
+    """Read all 25 lanes via the registered read port.
 
-    Use the canonical cocotb pattern: wait for the clock edge (which
-    triggers any NBAs / always_ff updates), then `await ReadOnly()`
-    to settle into the read-only phase where all combinational
-    propagation has resolved. Without ReadOnly, Icarus samples
-    `read_data` before the `assign read_data = state[read_addr]`
-    has propagated the new address — that produced X reads even
-    though the RTL state itself was correct (confirmed by a pure-SV
-    testbench: f^24(0) lane 0 matches the published Keccak-Team
-    constant 0xF1258F7940E1DDE7).
+    keccak_f1600.sv registers read_data via:
+        always_ff @(posedge clk) read_data <= state[read_addr];
+
+    So the read pattern is: set read_addr, wait for the clock edge that
+    samples it, wait one more edge so the NBA settles, then sample.
+    Robust under both Icarus and Verilator.
     """
     out = []
     for i in range(NUM_LANES):
         dut.read_addr.value = i
-        await RisingEdge(dut.clk)
-        await ReadOnly()
+        await RisingEdge(dut.clk)   # this edge samples read_addr=i
+        await RisingEdge(dut.clk)   # this edge propagates the NBA into read_data
         out.append(int(dut.read_data.value))
-        # Exit the read-only phase so the next iteration's write to
-        # read_addr.value is accepted by the scheduler.
-        await NextTimeStep()
     return out
 
 
