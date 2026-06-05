@@ -45,10 +45,17 @@ async def load_state(dut, state):
 
 
 async def read_state(dut):
+    """Read all 25 lanes via the combinational read port.
+
+    Wait a full clock edge between setting read_addr and sampling
+    read_data — Icarus' combinational propagation through an unpacked
+    array index doesn't always settle within a sub-cycle Timer wait,
+    which manifested as X reads in the first CI run of this test.
+    """
     out = []
     for i in range(NUM_LANES):
         dut.read_addr.value = i
-        await Timer(1, units="ns")
+        await RisingEdge(dut.clk)
         out.append(int(dut.read_data.value))
     return out
 

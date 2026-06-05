@@ -64,13 +64,16 @@ async def load_poly(dut, poly):
 
 
 async def read_poly(dut):
-    """Read all 256 coefficients via the combinational read port."""
+    """Read all 256 coefficients via the combinational read port.
+
+    Wait a full clock edge between setting read_addr and sampling
+    read_data — Icarus' combinational propagation through an unpacked
+    array index doesn't always settle within a sub-cycle Timer wait.
+    """
     out = []
     for i in range(N):
         dut.read_addr.value = i
-        # combinational read — need one clock for the address to propagate
-        # through the testbench signal-update model
-        await Timer(1, units="ns")
+        await RisingEdge(dut.clk)
         out.append(int(dut.read_data.value))
     return out
 
