@@ -10,7 +10,7 @@ import random
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, Timer
+from cocotb.triggers import RisingEdge, Timer, ReadOnly
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "python"))
@@ -47,15 +47,21 @@ async def load_state(dut, state):
 async def read_state(dut):
     """Read all 25 lanes via the combinational read port.
 
-    Wait a full clock edge between setting read_addr and sampling
-    read_data — Icarus' combinational propagation through an unpacked
-    array index doesn't always settle within a sub-cycle Timer wait,
-    which manifested as X reads in the first CI run of this test.
+    Use the canonical cocotb pattern: wait for the clock edge (which
+    triggers any NBAs / always_ff updates), then `await ReadOnly()`
+    to settle into the read-only phase where all combinational
+    propagation has resolved. Without ReadOnly, Icarus samples
+    `read_data` before the `assign read_data = state[read_addr]`
+    has propagated the new address — that produced X reads even
+    though the RTL state itself was correct (confirmed by a pure-SV
+    testbench: f^24(0) lane 0 matches the published Keccak-Team
+    constant 0xF1258F7940E1DDE7).
     """
     out = []
     for i in range(NUM_LANES):
         dut.read_addr.value = i
         await RisingEdge(dut.clk)
+        await ReadOnly()
         out.append(int(dut.read_data.value))
     return out
 

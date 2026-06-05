@@ -23,7 +23,7 @@ import random
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, Timer
+from cocotb.triggers import RisingEdge, Timer, ReadOnly
 
 # Locate python/ for the golden model
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -66,14 +66,15 @@ async def load_poly(dut, poly):
 async def read_poly(dut):
     """Read all 256 coefficients via the combinational read port.
 
-    Wait a full clock edge between setting read_addr and sampling
-    read_data — Icarus' combinational propagation through an unpacked
-    array index doesn't always settle within a sub-cycle Timer wait.
+    Same `RisingEdge -> ReadOnly` pattern as test_keccak.py. The NTT
+    test happened to pass without ReadOnly under Icarus, but the
+    pattern is the robust one — both tests now share it.
     """
     out = []
     for i in range(N):
         dut.read_addr.value = i
         await RisingEdge(dut.clk)
+        await ReadOnly()
         out.append(int(dut.read_data.value))
     return out
 
