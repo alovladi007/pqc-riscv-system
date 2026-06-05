@@ -23,7 +23,7 @@ import random
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, Timer, ReadOnly
+from cocotb.triggers import RisingEdge, Timer, ReadOnly, NextTimeStep
 
 # Locate python/ for the golden model
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -76,6 +76,8 @@ async def read_poly(dut):
         await RisingEdge(dut.clk)
         await ReadOnly()
         out.append(int(dut.read_data.value))
+        # Exit read-only so the next iteration's signal write is accepted.
+        await NextTimeStep()
     return out
 
 

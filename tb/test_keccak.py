@@ -10,7 +10,7 @@ import random
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, Timer, ReadOnly
+from cocotb.triggers import RisingEdge, Timer, ReadOnly, NextTimeStep
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "python"))
@@ -63,6 +63,9 @@ async def read_state(dut):
         await RisingEdge(dut.clk)
         await ReadOnly()
         out.append(int(dut.read_data.value))
+        # Exit the read-only phase so the next iteration's write to
+        # read_addr.value is accepted by the scheduler.
+        await NextTimeStep()
     return out
 
 
